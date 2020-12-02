@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<launch>
+
+    <arg name="odom_topic" default="/laser_odom"/>
+    <arg name="lidar_topic" default="/velodyne_points"/>
+    <arg name="odom_frame" default="summit_xl_steel_omni_lidar_odom"/>
+    <arg name="base_frame" default="summit_xl_steel_omni_base_footprint"/>
+    <arg name="lidar_frame" default="summit_xl_steel_omni_velodyne"/>
+
+    <!-- For Velodyne VLP-16 -->
+    <param name="scan_line" value="16" />
+
+    <param name="globalFrame" value="$(arg odom_frame)"/>
+    <param name="baseFrame" value="$(arg base_frame)"/>
+    <param name="lidarFrame" value="$(arg lidar_frame)"/>
+
+    <!--- Sim Time -->
+    <param name="use_sim_time" value="true"/>
+    <param name="scan_period" value="0.1" />
+
+    <param name="vertical_angle" type="double" value="2.0" />
+    <param name="map_resolution" type="double" value="0.2" />
+    <param name="max_dis" type="double" value="90.0" />
+    <param name="min_dis" type="double" value="0.5" />
+    <!--- -->
+    <node pkg="floam" type="floam_laser_processing_node" name="floam_laser_processing_node" output="screen"/>
+    <node pkg="floam" type="floam_odom_estimation_node" name="floam_odom_estimation_node" output="screen"/>
+    <node pkg="floam" type="floam_laser_mapping_node" name="floam_laser_mapping_node" output="screen"/>
+    
+    <arg name="rviz" default="true" />
+    <group if="$(arg rviz)">
+        <node launch-prefix="nice" pkg="rviz" type="rviz" name="floam_rviz"
+              args="-d $(find floam)/rviz/floam_summit_velodyne.rviz" />
+    </group>
+
+    <node pkg="hector_trajectory_server" type="hector_trajectory_server" name="trajectory_server_loam"
+          ns="$(arg base_frame)" >
+        <remap from="/odom" to="$(arg odom_topic)"/>
+        <param name="/target_frame_name" value="$(arg odom_frame)" />
+        <param name="/source_frame_name" value="$(arg base_frame)" />
+        <param name="/trajectory_update_rate" value="10.0" />
+        <param name="/trajectory_publish_rate" value="10.0" />
+    </node>
+
+</launch>
