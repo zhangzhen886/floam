@@ -26,6 +26,11 @@
 #include "laserMappingClass.h"
 #include "lidar.h"
 
+using namespace std;
+
+string lidarFrame;
+string baseFrame;
+string globalFrame;
 
 LaserMappingClass laserMapping;
 lidar::Lidar lidar_param;
@@ -48,9 +53,8 @@ void velodyneHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
     mutex_lock.unlock();
 }
 
-
-void laser_mapping(){
-    while(1){
+[[noreturn]] void laser_mapping(){
+    while(true){
         if(!odometryBuf.empty() && !pointCloudBuf.empty()){
 
             //read data
@@ -88,14 +92,13 @@ void laser_mapping(){
             sensor_msgs::PointCloud2 PointsMsg;
             pcl::toROSMsg(*pc_map, PointsMsg);
             PointsMsg.header.stamp = pointcloud_time;
-            PointsMsg.header.frame_id = "/map";
-            map_pub.publish(PointsMsg); 
-            
-
-
+            PointsMsg.header.frame_id = globalFrame;
+            map_pub.publish(PointsMsg);
+            ROS_INFO("[FLOAM] mapping elapsed time: %f ms \n",
+                     (ros::Time::now().toSec() - pointcloud_time.toSec()) * 1000);
         }
         //sleep 2 ms every time
-        std::chrono::milliseconds dura(2);
+        std::chrono::milliseconds dura(1);
         std::this_thread::sleep_for(dura);
     }
 }
@@ -118,6 +121,10 @@ int main(int argc, char **argv)
     nh.getParam("/scan_line", scan_line);
     nh.getParam("/map_resolution", map_resolution);
 
+    nh.param<string>("lidarFrame", lidarFrame, "/velodyne");
+    nh.param<string>("baseFrame", baseFrame, "/base_link");
+    nh.param<string>("globalFrame", globalFrame, "/odom");
+
     lidar_param.setScanPeriod(scan_period);
     lidar_param.setVerticalAngle(vertical_angle);
     lidar_param.setLines(scan_line);
@@ -126,9 +133,9 @@ int main(int argc, char **argv)
 
     laserMapping.init(map_resolution);
     ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points_filtered", 100, velodyneHandler);
-    ros::Subscriber subOdometry = nh.subscribe<nav_msgs::Odometry>("/odom", 100, odomCallback);
+    ros::Subscriber subOdometry = nh.subscribe<nav_msgs::Odometry>("/laser_odom", 100, odomCallback);
 
-    map_pub = nh.advertise<sensor_msgs::PointCloud2>("/map", 100);
+    map_pub = nh.advertise<sensor_msgs::PointCloud2>("/lidar_map", 100);
     std::thread laser_mapping_process{laser_mapping};
 
     ros::spin();

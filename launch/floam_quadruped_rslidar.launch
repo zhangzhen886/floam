@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<launch>
+
+    <arg name="rviz" default="true" />
+    <arg name="use_sim_time" default="false"/>
+
+    <arg name="odom_topic" default="/laser_odom"/>
+    <arg name="lidar_topic" default="/laser_seg/filtered_cloud"/>
+    <arg name="odom_frame" default="lidar_odom"/>
+    <arg name="base_frame" default="base_link"/>
+    <arg name="lidar_frame" default="rslidar"/>
+
+    <param name="use_sim_time" value="$(arg use_sim_time)" />
+
+    <!-- For Velodyne VLP-16 -->
+    <param name="scan_line" value="16" />
+
+    <param name="globalFrame" value="$(arg odom_frame)"/>
+    <param name="baseFrame" value="$(arg base_frame)"/>
+    <param name="lidarFrame" value="$(arg lidar_frame)"/>
+
+    <!--- Sim Time -->
+    <param name="scan_period" value="0.1" />
+
+    <param name="vertical_angle" type="double" value="2.0" />
+    <param name="map_resolution" type="double" value="0.2" />
+    <param name="max_dis" type="double" value="30.0" />
+    <param name="min_dis" type="double" value="0.5" />
+    <!--- -->
+    <node pkg="floam" type="floam_laser_processing_node" name="floam_laser_processing_node" output="log">
+        <remap from="/velodyne_points" to="$(arg lidar_topic)"/>
+    </node>
+    <node pkg="floam" type="floam_odom_estimation_node" name="floam_odom_estimation_node" output="log">
+        <remap from="/laser_odom" to="$(arg odom_topic)"/>
+    </node>
+    <!--<node pkg="floam" type="floam_laser_mapping_node" name="floam_laser_mapping_node" output="log"/>-->
+
+    <node if="$(arg rviz)" launch-prefix="nice" pkg="rviz" type="rviz" name="floam_rviz"
+          args="-d $(find floam)/rviz/floam_velodyne.rviz" />
+
+</launch>

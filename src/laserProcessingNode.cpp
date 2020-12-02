@@ -27,6 +27,7 @@
 #include "lidar.h"
 #include "laserProcessingClass.h"
 
+using namespace std;
 
 LaserProcessingClass laserProcessing;
 std::mutex mutex_lock;
@@ -36,6 +37,10 @@ lidar::Lidar lidar_param;
 ros::Publisher pubEdgePoints;
 ros::Publisher pubSurfPoints;
 ros::Publisher pubLaserCloudFiltered;
+
+string lidarFrame;
+string baseFrame;
+string globalFrame;
 
 void velodyneHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
 {
@@ -48,8 +53,8 @@ void velodyneHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
 double total_time =0;
 int total_frame=0;
 
-void laser_processing(){
-    while(1){
+[[noreturn]] void laser_processing(){
+    while(true){
         if(!pointCloudBuf.empty()){
             //read data
             mutex_lock.lock();
@@ -58,6 +63,8 @@ void laser_processing(){
             ros::Time pointcloud_time = (pointCloudBuf.front())->header.stamp;
             pointCloudBuf.pop();
             mutex_lock.unlock();
+            ROS_INFO("[FLOAM] read data elapsed time: %f ms",
+                     (ros::Time::now().toSec() - pointcloud_time.toSec()) * 1000);
 
             pcl::PointCloud<pcl::PointXYZI>::Ptr pointcloud_edge(new pcl::PointCloud<pcl::PointXYZI>());          
             pcl::PointCloud<pcl::PointXYZI>::Ptr pointcloud_surf(new pcl::PointCloud<pcl::PointXYZI>());
@@ -70,7 +77,7 @@ void laser_processing(){
             total_frame++;
             float time_temp = elapsed_seconds.count() * 1000;
             total_time+=time_temp;
-            //ROS_INFO("average laser processing time %f ms \n \n", total_time/total_frame);
+            ROS_INFO("average laser processing time %f ms", total_time/total_frame);
 
             sensor_msgs::PointCloud2 laserCloudFilteredMsg;
             pcl::PointCloud<pcl::PointXYZI>::Ptr pointcloud_filtered(new pcl::PointCloud<pcl::PointXYZI>());  
@@ -78,25 +85,26 @@ void laser_processing(){
             *pointcloud_filtered+=*pointcloud_surf;
             pcl::toROSMsg(*pointcloud_filtered, laserCloudFilteredMsg);
             laserCloudFilteredMsg.header.stamp = pointcloud_time;
-            laserCloudFilteredMsg.header.frame_id = "/base_link";
+            laserCloudFilteredMsg.header.frame_id = lidarFrame;
             pubLaserCloudFiltered.publish(laserCloudFilteredMsg);
 
             sensor_msgs::PointCloud2 edgePointsMsg;
             pcl::toROSMsg(*pointcloud_edge, edgePointsMsg);
             edgePointsMsg.header.stamp = pointcloud_time;
-            edgePointsMsg.header.frame_id = "/base_link";
+            edgePointsMsg.header.frame_id = lidarFrame;
             pubEdgePoints.publish(edgePointsMsg);
-
 
             sensor_msgs::PointCloud2 surfPointsMsg;
             pcl::toROSMsg(*pointcloud_surf, surfPointsMsg);
             surfPointsMsg.header.stamp = pointcloud_time;
-            surfPointsMsg.header.frame_id = "/base_link";
+            surfPointsMsg.header.frame_id = lidarFrame;
             pubSurfPoints.publish(surfPointsMsg);
 
+            ROS_INFO("[FLOAM] registrate elapsed time: %f ms",
+                     (ros::Time::now().toSec() - pointcloud_time.toSec()) * 1000);
         }
         //sleep 2 ms every time
-        std::chrono::milliseconds dura(2);
+        std::chrono::milliseconds dura(1);
         std::this_thread::sleep_for(dura);
     }
 }
@@ -118,6 +126,10 @@ int main(int argc, char **argv)
     nh.getParam("/min_dis", min_dis);
     nh.getParam("/scan_line", scan_line);
 
+    nh.param<string>("lidarFrame", lidarFrame, "/velodyne");
+    nh.param<string>("baseFrame", baseFrame, "/base_link");
+    nh.param<string>("globalFrame", globalFrame, "/odom");
+
     lidar_param.setScanPeriod(scan_period);
     lidar_param.setVerticalAngle(vertical_angle);
     lidar_param.setLines(scan_line);
@@ -126,13 +138,13 @@ int main(int argc, char **argv)
 
     laserProcessing.init(lidar_param);
 
-    ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 100, velodyneHandler);
+    ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 10, velodyneHandler);
 
-    pubLaserCloudFiltered = nh.advertise<sensor_msgs::PointCloud2>("/velodyne_points_filtered", 100);
+    pubLaserCloudFiltered = nh.advertise<sensor_msgs::PointCloud2>("/velodyne_points_filtered", 10);
 
-    pubEdgePoints = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_edge", 100);
+    pubEdgePoints = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_edge", 10);
 
-    pubSurfPoints = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surf", 100); 
+    pubSurfPoints = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surf", 10);
 
     std::thread laser_processing_process{laser_processing};
 
