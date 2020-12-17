@@ -113,18 +113,26 @@ int total_frame=0;
                 ROS_INFO("average odom estimation time %f ms", total_time/total_frame);
             }
 
-
-
             Eigen::Quaterniond q_current(odomEstimation.odom.rotation());
             //q_current.normalize();
             Eigen::Vector3d t_current = odomEstimation.odom.translation();
 
+            static tf::Transform tf_odom2base_last;
             tf::Transform tf_odom2lidar;
             tf_odom2lidar.setOrigin( tf::Vector3(t_current.x(), t_current.y(), t_current.z()) );
             tf::Quaternion q(q_current.x(), q_current.y(), q_current.z(), q_current.w());
             tf_odom2lidar.setRotation(q);
             tf::Transform tf_odom2base;
             tf_odom2base.mult(tf_odom2lidar, tf_base2lidar.inverse());
+
+            tf::Transform tf_base_delta;
+            tf_base_delta.mult(tf_odom2base_last.inverse(), tf_odom2base);
+            double delta_T[3], delta_R[3];
+            delta_T[0] = tf_base_delta.getOrigin().getX();
+            delta_T[1] = tf_base_delta.getOrigin().getY();
+            delta_T[2] = tf_base_delta.getOrigin().getZ();
+            tf::Matrix3x3(tf_base_delta.getRotation()).getRPY(delta_R[0], delta_R[1], delta_R[2]);
+            tf_odom2base_last = tf_odom2base;
 
             // publish odometry
             nav_msgs::Odometry laserOdometry;
@@ -138,6 +146,12 @@ int total_frame=0;
             laserOdometry.pose.pose.position.x = tf_odom2base.getOrigin().x();
             laserOdometry.pose.pose.position.y = tf_odom2base.getOrigin().y();
             laserOdometry.pose.pose.position.z = tf_odom2base.getOrigin().z();
+            laserOdometry.twist.twist.linear.x = delta_T[0] / 0.1;
+            laserOdometry.twist.twist.linear.y = delta_T[1] / 0.1;
+            laserOdometry.twist.twist.linear.z = delta_T[2] / 0.1;
+            laserOdometry.twist.twist.angular.x = delta_R[0] / 0.1;
+            laserOdometry.twist.twist.angular.y = delta_R[1] / 0.1;
+            laserOdometry.twist.twist.angular.z = delta_R[2] / 0.1;
             pubLaserOdometry.publish(laserOdometry);
 
             // 发布odometry_path
@@ -198,7 +212,7 @@ int main(int argc, char **argv)
     ros::Subscriber subSurfLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_surf", 1, velodyneSurfHandler);
 
     pubLaserOdometry = nh.advertise<nav_msgs::Odometry>("/laser_odom", 10);
-    pubLaserAfterMappedPath = nh.advertise<nav_msgs::Path>("/lidar_odom_path", 10);
+    pubLaserAfterMappedPath = nh.advertise<nav_msgs::Path>("/laser_odom_path", 10);
 
     tf_listener_ptr = new tf::TransformListener(nh);
     // 先获得base_link到velodyne的tf转换关系，以便发布map到base_link的tf
