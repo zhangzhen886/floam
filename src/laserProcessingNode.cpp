@@ -47,7 +47,6 @@ void velodyneHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg)
     mutex_lock.lock();
     pointCloudBuf.push(laserCloudMsg);
     mutex_lock.unlock();
-   
 }
 
 double total_time =0;
